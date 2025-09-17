@@ -2,7 +2,7 @@ name: Upstream Sync
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # 每1小时执行一次
+    - cron: '0 */6 * * *' # 每6小时执行一次
   workflow_dispatch:       # 支持手动触发
 
 permissions:
@@ -46,3 +46,4 @@ jobs:
           retain_days: 0
 
           keep_minimum_runs: 2
+
