@@ -3,7 +3,6 @@
 'use client';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
-
 import Hls from 'hls.js';
 import { Heart, ChevronUp } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -2553,7 +2552,7 @@ function PlayPageClient() {
             const devicePerformance = getDevicePerformance()
             console.log(`🎯 设备性能等级: ${devicePerformance}`)
             
-            // 🚀 根据设备性能调整弹幕渲染策略（不减少数量）
+            // 🚀 激进性能优化：针对大量弹幕的渲染策略
             const getOptimizedConfig = () => {
               const baseConfig = {
                 danmuku: [], // 初始为空数组，后续通过load方法加载
@@ -2561,43 +2560,82 @@ function PlayPageClient() {
                 opacity: parseFloat(localStorage.getItem('danmaku_opacity') || '0.8'),
                 fontSize: parseInt(localStorage.getItem('danmaku_fontSize') || '25'),
                 color: '#FFFFFF',
-                mode: 0 as const, // 修正类型：使用 const assertion
+                mode: 0 as const,
                 modes: JSON.parse(localStorage.getItem('danmaku_modes') || '[0, 1, 2]') as Array<0 | 1 | 2>,
                 margin: JSON.parse(localStorage.getItem('danmaku_margin') || '[10, "75%"]') as [number | `${number}%`, number | `${number}%`],
                 visible: localStorage.getItem('danmaku_visible') !== 'false',
                 emitter: false,
                 maxLength: 50,
-                lockTime: 2, // v5.2.0优化: 减少锁定时间，降低快进时的延迟
+                lockTime: 1, // 🎯 进一步减少锁定时间，提升进度跳转响应
                 theme: 'dark' as const,
                 width: 300,
+
+                // 🎯 激进优化配置 - 保持功能完整性
+                antiOverlap: devicePerformance === 'high', // 只有高性能设备开启防重叠，避免重叠计算
+                synchronousPlayback: true, // ✅ 必须保持true！确保弹幕与视频播放速度同步
+                heatmap: false, // 关闭热力图，减少DOM计算开销
                 
-                // 🧠 智能过滤器 - 只过滤有问题的弹幕，不减少数量
+                // 🧠 智能过滤器 - 激进性能优化，过滤影响性能的弹幕
                 filter: (danmu: any) => {
-                  // 过滤空弹幕
+                  // 基础验证
                   if (!danmu.text || !danmu.text.trim()) return false
-                  
-                  // 过滤超长弹幕（影响性能）
-                  if (danmu.text.length > 100) return false
-                  
-                  // 过滤可能导致渲染问题的特殊字符
-                  const specialCharCount = (danmu.text.match(/[^\u4e00-\u9fa5a-zA-Z0-9\s.,!?；，。！？]/g) || []).length
-                  if (specialCharCount > 10) return false
-                  
-                  return true // 保持尽可能多的弹幕
+
+                  const text = danmu.text.trim();
+
+                  // 🔥 激进长度限制，减少DOM渲染负担
+                  if (text.length > 50) return false // 从100改为50，更激进
+                  if (text.length < 2) return false  // 过短弹幕通常无意义
+
+                  // 🔥 激进特殊字符过滤，避免复杂渲染
+                  const specialCharCount = (text.match(/[^\u4e00-\u9fa5a-zA-Z0-9\s.,!?；，。！？]/g) || []).length
+                  if (specialCharCount > 5) return false // 从10改为5，更严格
+
+                  // 🔥 过滤纯数字或纯符号弹幕，减少无意义渲染
+                  if (/^\d+$/.test(text)) return false
+                  if (/^[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]+$/.test(text)) return false
+
+                  // 🔥 过滤常见低质量弹幕，提升整体质量
+                  const lowQualityPatterns = [
+                    /^666+$/, /^好+$/, /^哈+$/, /^啊+$/,
+                    /^[!！.。？?]+$/, /^牛+$/, /^强+$/
+                  ];
+                  if (lowQualityPatterns.some(pattern => pattern.test(text))) return false
+
+                  return true
                 },
                 
-                // 🎯 保持原有的 beforeVisible 逻辑，只添加性能优化
+                // 🚀 激进性能优化的动态密度控制
                 beforeVisible: (danmu: any) => {
                   return new Promise<boolean>((resolve) => {
-                    // 低性能设备添加CSS动画优化
-                    if (devicePerformance === 'low' && danmu.$ref && danmu.mode === 0) {
-                      // 添加硬件加速样式
-                      danmu.$ref.classList.add('art-danmuku-optimized')
-                      danmu.$ref.style.willChange = 'transform'
-                      danmu.$ref.style.backfaceVisibility = 'hidden'
+                    // 🎯 动态弹幕密度控制 - 根据当前屏幕上的弹幕数量决定是否显示
+                    const currentVisibleCount = document.querySelectorAll('.art-danmuku [data-state="emit"]').length;
+                    const maxConcurrentDanmu = devicePerformance === 'high' ? 60 :
+                                             devicePerformance === 'medium' ? 40 : 25;
+
+                    if (currentVisibleCount >= maxConcurrentDanmu) {
+                      // 🔥 当弹幕密度过高时，随机丢弃部分弹幕，保持流畅性
+                      const dropRate = devicePerformance === 'high' ? 0.1 :
+                                      devicePerformance === 'medium' ? 0.3 : 0.5;
+                      if (Math.random() < dropRate) {
+                        resolve(false); // 丢弃当前弹幕
+                        return;
+                      }
                     }
-                    resolve(true)
-                  })
+
+                    // 🎯 硬件加速优化
+                    if (danmu.$ref && danmu.mode === 0) {
+                      danmu.$ref.style.willChange = 'transform';
+                      danmu.$ref.style.backfaceVisibility = 'hidden';
+
+                      // 低性能设备额外优化
+                      if (devicePerformance === 'low') {
+                        danmu.$ref.style.transform = 'translateZ(0)'; // 强制硬件加速
+                        danmu.$ref.classList.add('art-danmuku-optimized');
+                      }
+                    }
+
+                    resolve(true);
+                  });
                 },
               }
               

@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { getCacheTime } from '@/lib/config';
 import { parseShortDramaEpisode } from '@/lib/shortdrama.client';
 
 // 标记为动态路由
@@ -70,11 +71,13 @@ export async function GET(request: NextRequest) {
       type_name: '短剧',
     };
 
-    // 设置与网页端一致的缓存策略：详情缓存4小时
-    const maxAge = 4 * 60 * 60; // 4小时转秒
+    // 设置与豆瓣一致的缓存策略
+    const cacheTime = await getCacheTime();
     const finalResponse = NextResponse.json(response);
-    finalResponse.headers.set('Cache-Control', `public, max-age=${maxAge}, s-maxage=${maxAge}`);
-    finalResponse.headers.set('Vary', 'Accept-Encoding');
+    finalResponse.headers.set('Cache-Control', `public, max-age=${cacheTime}, s-maxage=${cacheTime}`);
+    finalResponse.headers.set('CDN-Cache-Control', `public, s-maxage=${cacheTime}`);
+    finalResponse.headers.set('Vercel-CDN-Cache-Control', `public, s-maxage=${cacheTime}`);
+    finalResponse.headers.set('Netlify-Vary', 'query');
 
     return finalResponse;
   } catch (error) {

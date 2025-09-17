@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// 标记为动态路由
+import { getCacheTime } from '@/lib/config';
+
+// 强制动态路由，禁用所有缓存
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 // 服务端专用函数，直接调用外部API
 async function getRecommendedShortDramasInternal(
@@ -57,11 +61,24 @@ export async function GET(request: NextRequest) {
 
     const result = await getRecommendedShortDramasInternal(categoryNum, pageSize);
 
-    // 设置与网页端一致的缓存策略：推荐缓存1小时
-    const maxAge = 1 * 60 * 60; // 1小时转秒
+    // 测试1小时HTTP缓存策略
     const response = NextResponse.json(result);
-    response.headers.set('Cache-Control', `public, max-age=${maxAge}, s-maxage=${maxAge}`);
-    response.headers.set('Vary', 'Accept-Encoding');
+
+    console.log('🕐 [RECOMMEND] 设置1小时HTTP缓存 - 测试自动过期刷新');
+
+    // 1小时 = 3600秒
+    const cacheTime = 3600;
+    response.headers.set('Cache-Control', `public, max-age=${cacheTime}, s-maxage=${cacheTime}`);
+    response.headers.set('CDN-Cache-Control', `public, s-maxage=${cacheTime}`);
+    response.headers.set('Vercel-CDN-Cache-Control', `public, s-maxage=${cacheTime}`);
+
+    // 调试信息
+    response.headers.set('X-Cache-Duration', '1hour');
+    response.headers.set('X-Cache-Expires-At', new Date(Date.now() + cacheTime * 1000).toISOString());
+    response.headers.set('X-Debug-Timestamp', new Date().toISOString());
+
+    // Vary头确保不同设备有不同缓存
+    response.headers.set('Vary', 'Accept-Encoding, User-Agent');
 
     return response;
   } catch (error) {
