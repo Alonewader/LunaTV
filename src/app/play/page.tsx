@@ -1414,9 +1414,10 @@ function PlayPageClient() {
   useEffect(() => {
     updateVideoUrl(detail, currentEpisodeIndex);
     
-    // 重置弹幕加载标识，允许新集数加载弹幕
+    // 🔥 关键修复：重置弹幕加载标识，确保新集数能正确加载弹幕
     lastDanmuLoadKeyRef.current = '';
-    
+    danmuLoadingRef.current = false; // 重置加载状态
+
     // 清除之前的集数切换定时器，防止重复执行
     if (episodeSwitchTimeoutRef.current) {
       clearTimeout(episodeSwitchTimeoutRef.current);
@@ -1425,7 +1426,13 @@ function PlayPageClient() {
     // 如果播放器已经存在且弹幕插件已加载，重新加载弹幕
     if (artPlayerRef.current && artPlayerRef.current.plugins?.artplayerPluginDanmuku) {
       console.log('🚀 集数变化，优化后重新加载弹幕');
-      
+
+      // 🔥 关键修复：立即清空当前弹幕，避免旧弹幕残留
+      const plugin = artPlayerRef.current.plugins.artplayerPluginDanmuku;
+      plugin.reset(); // 重置弹幕状态
+      plugin.load([]); // 清空弹幕数据
+      console.log('🧹 已清空旧弹幕数据');
+
       // 保存当前弹幕插件状态
       danmuPluginStateRef.current = {
         isHide: artPlayerRef.current.plugins.artplayerPluginDanmuku.isHide,
@@ -1465,7 +1472,8 @@ function PlayPageClient() {
               }
             } else {
               console.log('📭 集数变化后没有弹幕数据可加载');
-              // 不自动清空，保持用户体验
+              plugin.load([]); // 确保清空弹幕
+
               if (artPlayerRef.current) {
                 artPlayerRef.current.notice.show = '暂无弹幕数据';
               }
