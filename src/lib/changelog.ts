@@ -11,6 +11,26 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "5.4.3",
+    date: "2025-09-20",
+    added: [
+    "🎯 扩展Bangumi ID支持范围：从仅支持6位数字扩展至支持3-6位数字，兼容更多Bangumi主题ID"
+    ],
+    changed: [
+      // 无变更内容
+    ],
+    fixed: [
+    "🔧 修复弹幕菜单长时间播放后悬停失效问题：恢复原生ArtPlayer悬停机制处理弹幕控制",
+    "🖱️ 解决pointer-events阻挡导致的悬停检测失败：添加周期性状态重置防止长期DOM污染",
+    "🎮 实现精确进度条冲突解决方案：确保悬停功能在普通和全屏模式下均正常工作",
+    "⚡ 升级react-window至v2.1.1：采用单行网格优化改善布局处理",
+    "🔄 确保单行网格高度约束：当rowCount === 1时利用react-window 2.1.1修复",
+    "📺 修复剧集切换播放时间不重置问题：添加剧集变更检测标志",
+    "🎯 区分剧集和源切换逻辑：剧集使用switchUrl()重置至0，源使用switchQuality()保持时间",
+    "🧹 完善标志清理机制：确保所有路径下的状态标志正确清理"
+    ]
+  },
+  {
     version: "5.4.2",
     date: "2025-09-19",
     added: [

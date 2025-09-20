@@ -398,9 +398,10 @@ function PlayPageClient() {
   // 工具函数（Utils）
   // -----------------------------------------------------------------------------
 
-  // bangumi ID检测（6位数字）
+  // bangumi ID检测（3-6位数字）
   const isBangumiId = (id: number): boolean => {
-    return id > 0 && id.toString().length === 6;
+    const length = id.toString().length;
+    return id > 0 && length >= 3 && length <= 6;
   };
 
   // bangumi缓存配置
