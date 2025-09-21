@@ -16,6 +16,7 @@ import {
 } from '@/lib/watching-updates';
 
 import PageLayout from '@/components/PageLayout';
+import VideoCard from '@/components/VideoCard';
 
 import { PlayStatsResult } from '@/app/api/admin/play-stats/route';
 
@@ -167,9 +168,26 @@ const PlayStatsPage: React.FC = () => {
   }, [isAdmin, fetchAdminStats, fetchUserStats]);
 
   // 处理刷新按钮点击
-  const handleRefreshClick = () => {
+  const handleRefreshClick = async () => {
     console.log('刷新按钮被点击');
-    fetchStats();
+
+    try {
+      // 清除追番更新缓存
+      localStorage.removeItem('moontv_watching_updates');
+      localStorage.removeItem('moontv_last_update_check');
+      console.log('已清除追番更新缓存');
+
+      // 重新检查追番更新
+      await checkWatchingUpdates();
+      console.log('已重新检查追番更新');
+
+      // 重新获取统计数据
+      await fetchStats();
+      console.log('已重新获取统计数据');
+
+    } catch (error) {
+      console.error('刷新数据失败:', error);
+    }
   };
 
   // 切换用户详情展开状态（仅管理员）
@@ -240,16 +258,38 @@ const PlayStatsPage: React.FC = () => {
 
   // 处理追番更新卡片点击
   const handleWatchingUpdatesClick = () => {
-    if (watchingUpdates && watchingUpdates.hasUpdates) {
+    console.log('点击追番卡片，watchingUpdates:', watchingUpdates);
+    console.log('updatedCount:', watchingUpdates?.updatedCount);
+    console.log('continueWatchingCount:', watchingUpdates?.continueWatchingCount);
+
+    if (watchingUpdates && ((watchingUpdates.updatedCount || 0) > 0 || (watchingUpdates.continueWatchingCount || 0) > 0)) {
+      console.log('条件满足，显示弹窗');
       setShowWatchingUpdates(true);
+      console.log('setShowWatchingUpdates(true) 已调用');
+
+      // 强制刷新状态
+      setTimeout(() => {
+        setShowWatchingUpdates(prev => {
+          console.log('强制状态更新，当前值:', prev);
+          return true;
+        });
+      }, 100);
+    } else {
+      console.log('条件不满足，不显示弹窗');
     }
+  };
+
+  // 测试函数：强制显示弹窗
+  const forceShowPopup = () => {
+    console.log('强制显示弹窗');
+    setShowWatchingUpdates(true);
   };
 
   // 关闭追番更新详情
   const handleCloseWatchingUpdates = () => {
     setShowWatchingUpdates(false);
     markUpdatesAsViewed();
-    setWatchingUpdates(prev => prev ? { ...prev, hasUpdates: false, updatedCount: 0 } : null);
+    setWatchingUpdates(prev => prev ? { ...prev, hasUpdates: false, updatedCount: 0, continueWatchingCount: 0 } : null);
   };
 
   // 格式化更新时间
@@ -948,36 +988,169 @@ const PlayStatsPage: React.FC = () => {
                     常用来源
                   </div>
                 </div>
-                <div
-                  className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                    watchingUpdates?.hasUpdates
-                      ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/30'
-                      : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-900/30'
-                  }`}
-                  onClick={handleWatchingUpdatesClick}
-                  title={watchingUpdates?.hasUpdates ? '点击查看更新详情' : '暂无剧集更新'}
-                >
-                  <div className={`text-2xl font-bold ${
-                    watchingUpdates?.hasUpdates
-                      ? 'text-red-800 dark:text-red-300'
-                      : 'text-gray-800 dark:text-gray-300'
-                  }`}>
-                    {watchingUpdates?.updatedCount || 0}
-                  </div>
-                  <div className={`text-sm ${
-                    watchingUpdates?.hasUpdates
-                      ? 'text-red-600 dark:text-red-400'
-                      : 'text-gray-600 dark:text-gray-400'
-                  }`}>
-                    追番更新
-                  </div>
-                  {watchingUpdates?.hasUpdates && (
-                    <div className='text-xs text-red-500 dark:text-red-400 mt-1'>
-                      有新集数！
-                    </div>
-                  )}
-                </div>
               </div>
+
+              {/* 有新集数的剧集 */}
+              {watchingUpdates && watchingUpdates.updatedSeries.filter(series => series.hasNewEpisode).length > 0 && (
+                <div className="mb-8">
+                  <div className="flex items-center gap-2 mb-4">
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                      有新集数
+                    </h2>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                      <span className="text-sm text-red-500 font-medium">
+                        {watchingUpdates.updatedSeries.filter(series => series.hasNewEpisode).length}部剧集有更新
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 移动端网格布局 */}
+                  <div className="sm:hidden">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-8 pt-4 pb-6">
+                      {watchingUpdates.updatedSeries
+                        .filter(series => series.hasNewEpisode)
+                        .map((series, index) => (
+                          <div key={`new-${series.title}_${series.year}_${index}`} className="relative w-full">
+                            <div className="relative">
+                              <VideoCard
+                                title={series.title}
+                                poster={series.cover || ''}
+                                year={series.year}
+                                from="playrecord"
+                                progress={0}
+                                currentEpisode={series.currentEpisode}
+                                episodes={series.totalEpisodes}
+                                source={series.sourceKey}
+                                id={series.videoId}
+                                onDelete={undefined}
+                              />
+                              {/* 新集数提示光环效果 */}
+                              <div className="absolute inset-0 rounded-lg ring-2 ring-red-400 ring-opacity-50 animate-pulse pointer-events-none z-10"></div>
+                            </div>
+                            {/* 新集数徽章 */}
+                            <div className="absolute -top-2 -right-2 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-bounce z-50">
+                              +{series.newEpisodes}集
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* 桌面端网格布局 */}
+                  <div className="hidden sm:block">
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-x-6 gap-y-10 pt-6 pb-8">
+                      {watchingUpdates.updatedSeries
+                        .filter(series => series.hasNewEpisode)
+                        .map((series, index) => (
+                          <div key={`new-${series.title}_${series.year}_${index}`} className="relative w-full">
+                            <div className="relative">
+                              <VideoCard
+                                title={series.title}
+                                poster={series.cover || ''}
+                                year={series.year}
+                                from="playrecord"
+                                progress={0}
+                                currentEpisode={series.currentEpisode}
+                                episodes={series.totalEpisodes}
+                                source={series.sourceKey}
+                                id={series.videoId}
+                                onDelete={undefined}
+                              />
+                              {/* 新集数提示光环效果 */}
+                              <div className="absolute inset-0 rounded-lg ring-2 ring-red-400 ring-opacity-50 animate-pulse pointer-events-none z-10"></div>
+                            </div>
+                            {/* 新集数徽章 */}
+                            <div className="absolute -top-2 -right-2 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-bounce z-50">
+                              +{series.newEpisodes}集
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 继续观看的剧集 */}
+              {watchingUpdates && watchingUpdates.updatedSeries.filter(series => series.hasContinueWatching && !series.hasNewEpisode).length > 0 && (
+                <div className="mb-8">
+                  <div className="flex items-center gap-2 mb-4">
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                      继续观看
+                    </h2>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                      <span className="text-sm text-blue-500 font-medium">
+                        {watchingUpdates.updatedSeries.filter(series => series.hasContinueWatching && !series.hasNewEpisode).length}部剧集待续看
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 移动端网格布局 */}
+                  <div className="sm:hidden">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-8 pt-4 pb-6">
+                      {watchingUpdates.updatedSeries
+                        .filter(series => series.hasContinueWatching && !series.hasNewEpisode)
+                        .map((series, index) => (
+                          <div key={`continue-${series.title}_${series.year}_${index}`} className="relative w-full">
+                            <div className="relative">
+                              <VideoCard
+                                title={series.title}
+                                poster={series.cover || ''}
+                                year={series.year}
+                                from="playrecord"
+                                progress={0}
+                                currentEpisode={series.currentEpisode}
+                                episodes={series.totalEpisodes}
+                                source={series.sourceKey}
+                                id={series.videoId}
+                                onDelete={undefined}
+                              />
+                              {/* 继续观看提示光环效果 */}
+                              <div className="absolute inset-0 rounded-lg ring-2 ring-blue-400 ring-opacity-50 animate-pulse pointer-events-none z-10"></div>
+                            </div>
+                            {/* 继续观看徽章 */}
+                            <div className="absolute -top-2 -right-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-pulse z-50">
+                              继续看
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* 桌面端网格布局 */}
+                  <div className="hidden sm:block">
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-x-6 gap-y-10 pt-6 pb-8">
+                      {watchingUpdates.updatedSeries
+                        .filter(series => series.hasContinueWatching && !series.hasNewEpisode)
+                        .map((series, index) => (
+                          <div key={`continue-${series.title}_${series.year}_${index}`} className="relative w-full">
+                            <div className="relative">
+                              <VideoCard
+                                title={series.title}
+                                poster={series.cover || ''}
+                                year={series.year}
+                                from="playrecord"
+                                progress={0}
+                                currentEpisode={series.currentEpisode}
+                                episodes={series.totalEpisodes}
+                                source={series.sourceKey}
+                                id={series.videoId}
+                                onDelete={undefined}
+                              />
+                              {/* 继续观看提示光环效果 */}
+                              <div className="absolute inset-0 rounded-lg ring-2 ring-blue-400 ring-opacity-50 animate-pulse pointer-events-none z-10"></div>
+                            </div>
+                            {/* 继续观看徽章 */}
+                            <div className="absolute -top-2 -right-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-pulse z-50">
+                              继续看
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* 最近播放记录 */}
               <div>
@@ -986,7 +1159,7 @@ const PlayStatsPage: React.FC = () => {
                 </h3>
                 {userStats.recentRecords && userStats.recentRecords.length > 0 ? (
                   <div className='grid grid-cols-1 lg:grid-cols-2 gap-4'>
-                    {userStats.recentRecords.map((record: any) => (
+                    {userStats.recentRecords.map((record: PlayRecord) => (
                       <div
                         key={record.title + record.save_time}
                         className='flex items-center space-x-4 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors'
@@ -1091,6 +1264,7 @@ const PlayStatsPage: React.FC = () => {
         >
           <ChevronUp className='w-6 h-6 transition-transform group-hover:scale-110' />
         </button>
+
       </PageLayout>
     );
   }
@@ -1221,41 +1395,235 @@ const PlayStatsPage: React.FC = () => {
                 常用来源
               </div>
             </div>
+            {/* 新集数更新 */}
             <div
-              className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                watchingUpdates?.hasUpdates
-                  ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/30'
-                  : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-900/30'
+              className={`p-4 rounded-lg border transition-all ${
+                (watchingUpdates?.updatedCount || 0) > 0
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                  : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
               }`}
-              onClick={handleWatchingUpdatesClick}
-              title={watchingUpdates?.hasUpdates ? '点击查看更新详情' : '暂无剧集更新'}
             >
               <div className={`text-2xl font-bold ${
-                watchingUpdates?.hasUpdates
+                (watchingUpdates?.updatedCount || 0) > 0
                   ? 'text-red-800 dark:text-red-300'
                   : 'text-gray-800 dark:text-gray-300'
               }`}>
                 {watchingUpdates?.updatedCount || 0}
               </div>
               <div className={`text-sm ${
-                watchingUpdates?.hasUpdates
+                (watchingUpdates?.updatedCount || 0) > 0
                   ? 'text-red-600 dark:text-red-400'
                   : 'text-gray-600 dark:text-gray-400'
               }`}>
-                追番更新
+                新集数更新
               </div>
-              {watchingUpdates?.hasUpdates && (
+              {(watchingUpdates?.updatedCount || 0) > 0 && (
                 <div className='text-xs text-red-500 dark:text-red-400 mt-1'>
-                  有新集数！
+                  有新集数发布！
+                </div>
+              )}
+            </div>
+
+            {/* 继续观看提醒 */}
+            <div
+              className={`p-4 rounded-lg border transition-all ${
+                (watchingUpdates?.continueWatchingCount || 0) > 0
+                  ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                  : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
+              }`}
+            >
+              <div className={`text-2xl font-bold ${
+                (watchingUpdates?.continueWatchingCount || 0) > 0
+                  ? 'text-blue-800 dark:text-blue-300'
+                  : 'text-gray-800 dark:text-gray-300'
+              }`}>
+                {watchingUpdates?.continueWatchingCount || 0}
+              </div>
+              <div className={`text-sm ${
+                (watchingUpdates?.continueWatchingCount || 0) > 0
+                  ? 'text-blue-600 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-gray-400'
+              }`}>
+                继续观看
+              </div>
+              {(watchingUpdates?.continueWatchingCount || 0) > 0 && (
+                <div className='text-xs text-blue-500 dark:text-blue-400 mt-1'>
+                  有剧集待续看！
                 </div>
               )}
             </div>
           </div>
 
-          {/* 最近播放记录 */}
+          {/* 有新集数的剧集 */}
+          {watchingUpdates && watchingUpdates.updatedSeries.filter(series => series.hasNewEpisode).length > 0 && (
+            <div className="mb-8">
+              <div className="flex items-center gap-2 mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  有新集数
+                </h2>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm text-red-500 font-medium">
+                    {watchingUpdates.updatedSeries.filter(series => series.hasNewEpisode).length}部剧集有更新
+                  </span>
+                </div>
+              </div>
+
+              {/* 移动端网格布局 */}
+              <div className="sm:hidden">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-8 pt-4 pb-6">
+                  {watchingUpdates.updatedSeries
+                    .filter(series => series.hasNewEpisode)
+                    .map((series, index) => (
+                      <div key={`new-${series.title}_${series.year}_${index}`} className="relative w-full">
+                        <div className="relative">
+                          <VideoCard
+                            title={series.title}
+                            poster={series.cover || ''}
+                            year={series.year}
+                            from="playrecord"
+                            progress={0}
+                            currentEpisode={series.currentEpisode}
+                            episodes={series.totalEpisodes}
+                            source_name={series.source_name}
+                            source={series.source_name}
+                            id={`${series.title}_${series.year}`}
+                            onDelete={undefined}
+                          />
+                          {/* 新集数提示光环效果 */}
+                          <div className="absolute inset-0 rounded-lg ring-2 ring-red-400 ring-opacity-50 animate-pulse pointer-events-none z-10"></div>
+                        </div>
+                        {/* 新集数徽章 */}
+                        <div className="absolute -top-2 -right-2 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-bounce z-50">
+                          +{series.newEpisodes}集
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* 桌面端网格布局 */}
+              <div className="hidden sm:block">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-x-6 gap-y-10 pt-6 pb-8">
+                  {watchingUpdates.updatedSeries
+                    .filter(series => series.hasNewEpisode)
+                    .map((series, index) => (
+                      <div key={`new-${series.title}_${series.year}_${index}`} className="relative w-full">
+                        <div className="relative">
+                          <VideoCard
+                            title={series.title}
+                            poster={series.cover || ''}
+                            year={series.year}
+                            from="playrecord"
+                            progress={0}
+                            currentEpisode={series.currentEpisode}
+                            episodes={series.totalEpisodes}
+                            source_name={series.source_name}
+                            source={series.source_name}
+                            id={`${series.title}_${series.year}`}
+                            onDelete={undefined}
+                          />
+                          {/* 新集数提示光环效果 */}
+                          <div className="absolute inset-0 rounded-lg ring-2 ring-red-400 ring-opacity-50 animate-pulse pointer-events-none z-10"></div>
+                        </div>
+                        {/* 新集数徽章 */}
+                        <div className="absolute -top-2 -right-2 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-bounce z-50">
+                          +{series.newEpisodes}集
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 继续观看的剧集 */}
+          {watchingUpdates && watchingUpdates.updatedSeries.filter(series => series.hasContinueWatching && !series.hasNewEpisode).length > 0 && (
+            <div className="mb-8">
+              <div className="flex items-center gap-2 mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  继续观看
+                </h2>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm text-blue-500 font-medium">
+                    {watchingUpdates.updatedSeries.filter(series => series.hasContinueWatching && !series.hasNewEpisode).length}部剧集待续看
+                  </span>
+                </div>
+              </div>
+
+              {/* 移动端网格布局 */}
+              <div className="sm:hidden">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-8 pt-4 pb-6">
+                  {watchingUpdates.updatedSeries
+                    .filter(series => series.hasContinueWatching && !series.hasNewEpisode)
+                    .map((series, index) => (
+                      <div key={`continue-${series.title}_${series.year}_${index}`} className="relative w-full">
+                        <div className="relative">
+                          <VideoCard
+                            title={series.title}
+                            poster={series.cover || ''}
+                            year={series.year}
+                            from="playrecord"
+                            progress={0}
+                            currentEpisode={series.currentEpisode}
+                            episodes={series.totalEpisodes}
+                            source_name={series.source_name}
+                            source={series.source_name}
+                            id={`${series.title}_${series.year}`}
+                            onDelete={undefined}
+                          />
+                          {/* 继续观看提示光环效果 */}
+                          <div className="absolute inset-0 rounded-lg ring-2 ring-blue-400 ring-opacity-50 animate-pulse pointer-events-none z-10"></div>
+                        </div>
+                        {/* 继续观看标识 */}
+                        <div className="absolute -top-2 -right-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs px-2 py-1 rounded-full shadow-lg z-50">
+                          继续观看
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* 桌面端网格布局 */}
+              <div className="hidden sm:block">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-x-6 gap-y-10 pt-6 pb-8">
+                  {watchingUpdates.updatedSeries
+                    .filter(series => series.hasContinueWatching && !series.hasNewEpisode)
+                    .map((series, index) => (
+                      <div key={`continue-${series.title}_${series.year}_${index}`} className="relative w-full">
+                        <div className="relative">
+                          <VideoCard
+                            title={series.title}
+                            poster={series.cover || ''}
+                            year={series.year}
+                            from="playrecord"
+                            progress={0}
+                            currentEpisode={series.currentEpisode}
+                            episodes={series.totalEpisodes}
+                            source_name={series.source_name}
+                            source={series.source_name}
+                            id={`${series.title}_${series.year}`}
+                            onDelete={undefined}
+                          />
+                          {/* 继续观看提示光环效果 */}
+                          <div className="absolute inset-0 rounded-lg ring-2 ring-blue-400 ring-opacity-50 animate-pulse pointer-events-none z-10"></div>
+                        </div>
+                        {/* 继续观看标识 */}
+                        <div className="absolute -top-2 -right-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs px-2 py-1 rounded-full shadow-lg z-50">
+                          继续观看
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 历史观看记录 */}
           <div>
             <h3 className='text-xl font-semibold text-gray-900 dark:text-white mb-6'>
-              最近播放记录
+              {watchingUpdates && (watchingUpdates.updatedCount > 0 || watchingUpdates.continueWatchingCount > 0) ? '历史观看' : '观看记录'}
             </h3>
             {userStats.recentRecords && userStats.recentRecords.length > 0 ? (
               <div className='grid grid-cols-1 lg:grid-cols-2 gap-4'>
@@ -1365,90 +1733,6 @@ const PlayStatsPage: React.FC = () => {
           <ChevronUp className='w-6 h-6 transition-transform group-hover:scale-110' />
         </button>
 
-        {/* 追番更新详情弹窗 */}
-        {showWatchingUpdates && watchingUpdates && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md max-h-[80vh] overflow-hidden">
-              {/* 标题栏 */}
-              <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM8 17l-3-3 3-3m5 0l3 3-3 3" />
-                  </svg>
-                  追番更新提醒
-                </h3>
-                <button
-                  onClick={handleCloseWatchingUpdates}
-                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* 内容区域 */}
-              <div className="p-4 max-h-[400px] overflow-y-auto">
-                {watchingUpdates.updatedCount > 0 ? (
-                  <>
-                    <div className="mb-4 text-center">
-                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                        {watchingUpdates.updatedCount}
-                      </div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                        个剧集有更新
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                        {formatLastUpdate(watchingUpdates.timestamp)}
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      {watchingUpdates.updatedSeries
-                        .filter(series => series.hasNewEpisode)
-                        .map((series, index) => (
-                          <div
-                            key={`${series.title}_${series.year}_${index}`}
-                            className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
-                          >
-                            <div className="font-medium text-gray-900 dark:text-white">
-                              {series.title}
-                            </div>
-                            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                              来源: {series.source_name} | 年份: {series.year}
-                            </div>
-                            <div className="text-sm text-blue-600 dark:text-blue-400 mt-1">
-                              已观看至第 {series.currentEpisode} 集，可能有新集数更新
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    <svg className="w-12 h-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM8 17l-3-3 3-3m5 0l3 3-3 3" />
-                    </svg>
-                    <p>暂无剧集更新</p>
-                    <p className="text-sm mt-2">
-                      系统会定期检查您追番的更新情况
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* 底部按钮 */}
-              <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-                <button
-                  onClick={handleCloseWatchingUpdates}
-                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                >
-                  我知道了
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </PageLayout>
     );
   }
