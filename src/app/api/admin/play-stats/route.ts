@@ -83,7 +83,13 @@ export async function GET(request: NextRequest) {
         // 设置项目开始时间，2025年9月14日
         const PROJECT_START_DATE = new Date('2025-09-14').getTime();
         const userCreatedAt = user.createdAt || PROJECT_START_DATE;
-        const registrationDays = Math.floor((now.getTime() - userCreatedAt) / (1000 * 60 * 60 * 24)) + 1;
+
+        // 使用自然日计算，与个人统计保持一致
+        const firstDate = new Date(userCreatedAt);
+        const currentDate = new Date();
+        const firstDay = new Date(firstDate.getFullYear(), firstDate.getMonth(), firstDate.getDate());
+        const currentDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+        const registrationDays = Math.floor((currentDay.getTime() - firstDay.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
         // 统计今日新增用户
         if (userCreatedAt >= todayStart) {
@@ -196,7 +202,13 @@ export async function GET(request: NextRequest) {
         // 设置项目开始时间，2025年9月14日
         const PROJECT_START_DATE = new Date('2025-09-14').getTime();
         const userCreatedAt = user.createdAt || PROJECT_START_DATE;
-        const registrationDays = Math.floor((now.getTime() - userCreatedAt) / (1000 * 60 * 60 * 24)) + 1;
+
+        // 使用自然日计算，与个人统计保持一致
+        const firstDate = new Date(userCreatedAt);
+        const currentDate = new Date();
+        const firstDay = new Date(firstDate.getFullYear(), firstDate.getMonth(), firstDate.getDate());
+        const currentDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+        const registrationDays = Math.floor((currentDay.getTime() - firstDay.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
         userStats.push({
           username: user.username,

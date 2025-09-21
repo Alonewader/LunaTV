@@ -93,6 +93,7 @@ const PlayStatsPage: React.FC = () => {
   // 获取管理员统计数据
   const fetchAdminStats = useCallback(async () => {
     try {
+      console.log('开始获取管理员统计数据...');
       const response = await fetch('/api/admin/play-stats');
 
       if (response.status === 401) {
@@ -106,8 +107,10 @@ const PlayStatsPage: React.FC = () => {
       }
 
       const data = await response.json();
+      console.log('管理员统计数据获取成功:', data);
       setStatsData(data);
     } catch (err) {
+      console.error('获取管理员统计数据失败:', err);
       const errorMessage =
         err instanceof Error ? err.message : '获取播放统计失败';
       setError(errorMessage);
@@ -117,6 +120,7 @@ const PlayStatsPage: React.FC = () => {
   // 获取用户个人统计数据
   const fetchUserStats = useCallback(async () => {
     try {
+      console.log('开始获取用户个人统计数据...');
       const response = await fetch('/api/user/my-stats');
 
       if (response.status === 401) {
@@ -130,8 +134,12 @@ const PlayStatsPage: React.FC = () => {
       }
 
       const data = await response.json();
+      console.log('用户个人统计数据获取成功:', data);
+      console.log('个人统计中的注册天数:', data.registrationDays);
+      console.log('个人统计中的登录天数:', data.loginDays);
       setUserStats(data);
     } catch (err) {
+      console.error('获取用户个人统计数据失败:', err);
       const errorMessage =
         err instanceof Error ? err.message : '获取个人统计失败';
       setError(errorMessage);
@@ -140,19 +148,29 @@ const PlayStatsPage: React.FC = () => {
 
   // 根据用户角色获取数据
   const fetchStats = useCallback(async () => {
+    console.log('fetchStats 被调用, isAdmin:', isAdmin);
     setLoading(true);
     setError(null);
 
     if (isAdmin) {
+      console.log('管理员模式，同时获取全站统计和个人统计');
       // 管理员同时获取全站统计和个人统计
       await Promise.all([fetchAdminStats(), fetchUserStats()]);
     } else {
+      console.log('普通用户模式，只获取个人统计');
       // 普通用户只获取个人统计
       await fetchUserStats();
     }
 
     setLoading(false);
+    console.log('fetchStats 完成');
   }, [isAdmin, fetchAdminStats, fetchUserStats]);
+
+  // 处理刷新按钮点击
+  const handleRefreshClick = () => {
+    console.log('刷新按钮被点击');
+    fetchStats();
+  };
 
   // 切换用户详情展开状态（仅管理员）
   const toggleUserExpanded = (username: string) => {
@@ -203,7 +221,7 @@ const PlayStatsPage: React.FC = () => {
 
   // 追番更新检查
   useEffect(() => {
-    if (!isAdmin && authInfo) {
+    if (authInfo) {
       const checkUpdates = async () => {
         const cached = getCachedWatchingUpdates();
         if (cached) {
@@ -218,7 +236,7 @@ const PlayStatsPage: React.FC = () => {
 
       checkUpdates();
     }
-  }, [isAdmin, authInfo]);
+  }, [authInfo]);
 
   // 处理追番更新卡片点击
   const handleWatchingUpdatesClick = () => {
@@ -426,7 +444,7 @@ const PlayStatsPage: React.FC = () => {
             </div>
 
             <button
-              onClick={fetchStats}
+              onClick={handleRefreshClick}
               disabled={loading}
               className='px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm rounded-lg transition-colors flex items-center space-x-2 ml-4'
             >
@@ -890,6 +908,14 @@ const PlayStatsPage: React.FC = () => {
                     注册天数
                   </div>
                 </div>
+                <div className='p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800'>
+                  <div className='text-2xl font-bold text-orange-800 dark:text-orange-300'>
+                    {userStats.loginDays || 0}
+                  </div>
+                  <div className='text-sm text-orange-600 dark:text-orange-400'>
+                    登录天数
+                  </div>
+                </div>
                 <div className='p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800'>
                   <div className='text-2xl font-bold text-purple-800 dark:text-purple-300'>
                     {userStats.totalMovies || userStats.totalPlays || 0}
@@ -1085,7 +1111,7 @@ const PlayStatsPage: React.FC = () => {
               </p>
             </div>
             <button
-              onClick={fetchStats}
+              onClick={handleRefreshClick}
               disabled={loading}
               className='px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm rounded-lg transition-colors flex items-center space-x-2'
             >
@@ -1153,6 +1179,14 @@ const PlayStatsPage: React.FC = () => {
               </div>
               <div className='text-sm text-green-600 dark:text-green-400'>
                 注册天数
+              </div>
+            </div>
+            <div className='p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800'>
+              <div className='text-2xl font-bold text-orange-800 dark:text-orange-300'>
+                {userStats.loginDays || 0}
+              </div>
+              <div className='text-sm text-orange-600 dark:text-orange-400'>
+                登录天数
               </div>
             </div>
             <div className='p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800'>
