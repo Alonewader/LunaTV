@@ -170,6 +170,7 @@ const PlayStatsPage: React.FC = () => {
   // 处理刷新按钮点击
   const handleRefreshClick = async () => {
     console.log('刷新按钮被点击');
+    setLoading(true);
 
     try {
       // 清除追番更新缓存
@@ -185,8 +186,14 @@ const PlayStatsPage: React.FC = () => {
       await fetchStats();
       console.log('已重新获取统计数据');
 
+      // 重新获取 watchingUpdates
+      const details = getDetailedWatchingUpdates();
+      setWatchingUpdates(details);
+
     } catch (error) {
       console.error('刷新数据失败:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -253,6 +260,27 @@ const PlayStatsPage: React.FC = () => {
       };
 
       checkUpdates();
+
+      // 监听播放记录更新事件（修复删除记录后页面不立即更新的问题）
+      const handlePlayRecordsUpdate = () => {
+        console.log('播放记录更新，重新检查 watchingUpdates');
+        // 强制清除缓存，确保立即更新
+        localStorage.removeItem('moontv_watching_updates');
+        localStorage.removeItem('moontv_last_update_check');
+        // 重新检查追番更新状态
+        checkWatchingUpdates().then(() => {
+          const details = getDetailedWatchingUpdates();
+          setWatchingUpdates(details);
+          console.log('watchingUpdates 已更新:', details);
+        });
+      };
+
+      // 监听播放记录更新事件
+      window.addEventListener('playRecordsUpdated', handlePlayRecordsUpdate);
+
+      return () => {
+        window.removeEventListener('playRecordsUpdated', handlePlayRecordsUpdate);
+      };
     }
   }, [authInfo]);
 
