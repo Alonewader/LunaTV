@@ -111,6 +111,10 @@ export async function checkWatchingUpdates(): Promise<void> {
         const [sourceName, videoId] = record.id.split('+');
         const updateInfo = await checkSingleRecordUpdate(record, videoId);
 
+        // 保留Alpha版本的保护机制：如果API返回的集数少于播放记录中的集数，保持播放记录中的集数
+        // 这样可以防止API临时出问题时集数回退
+        const protectedTotalEpisodes = updateInfo.latestEpisodes > record.total_episodes ? updateInfo.latestEpisodes : record.total_episodes;
+
         const seriesInfo = {
           title: record.title,
           source_name: record.source_name,
@@ -119,7 +123,7 @@ export async function checkWatchingUpdates(): Promise<void> {
           sourceKey: sourceName,
           videoId: videoId,
           currentEpisode: record.index,
-          totalEpisodes: record.total_episodes,
+          totalEpisodes: protectedTotalEpisodes,
           hasNewEpisode: updateInfo.hasUpdate,
           hasContinueWatching: updateInfo.hasContinueWatching,
           newEpisodes: updateInfo.newEpisodes,
@@ -154,7 +158,7 @@ export async function checkWatchingUpdates(): Promise<void> {
           sourceKey: sourceName,
           videoId: videoId,
           currentEpisode: record.index,
-          totalEpisodes: record.total_episodes,
+          totalEpisodes: record.total_episodes, // 错误时保持原有集数
           hasNewEpisode: false,
           hasContinueWatching: false,
           newEpisodes: 0,
@@ -228,8 +232,10 @@ async function checkSingleRecordUpdate(record: PlayRecord, videoId: string): Pro
       console.warn('数据源映射失败，使用原始名称:', mappingError);
     }
 
-    // 使用映射后的key调用API
-    const response = await fetch(`/api/detail?source=${sourceKey}&id=${videoId}`);
+    // 使用映射后的key调用API（API已默认不缓存，确保集数信息实时更新）
+    const apiUrl = `/api/detail?source=${sourceKey}&id=${videoId}`;
+    console.log(`${record.title} 调用API获取最新详情:`, apiUrl);
+    const response = await fetch(apiUrl);
     if (!response.ok) {
       console.warn(`获取${record.title}详情失败:`, response.status);
       return { hasUpdate: false, hasContinueWatching: false, newEpisodes: 0, remainingEpisodes: 0, latestEpisodes: record.total_episodes };
@@ -238,14 +244,26 @@ async function checkSingleRecordUpdate(record: PlayRecord, videoId: string): Pro
     const detailData = await response.json();
     const latestEpisodes = detailData.episodes ? detailData.episodes.length : 0;
 
+    // 添加详细调试信息
+    console.log(`${record.title} API检查详情:`, {
+      'API返回集数': latestEpisodes,
+      '播放记录集数': record.total_episodes,
+      '当前观看到': record.index
+    });
+
     // 检查两种情况：
-    // 1. 新集数更新：总集数增加了
+    // 1. 新集数更新：API返回的集数比播放记录中的多（现在绕过缓存，应该能获取最新数据）
     const hasUpdate = latestEpisodes > record.total_episodes;
     const newEpisodes = hasUpdate ? latestEpisodes - record.total_episodes : 0;
 
-    // 2. 继续观看提醒：用户还没看完现有集数
+    // 2. 继续观看提醒：用户还没看完现有集数（基于API返回的集数）
     const hasContinueWatching = record.index < latestEpisodes;
     const remainingEpisodes = hasContinueWatching ? latestEpisodes - record.index : 0;
+
+    // 如果API返回的集数少于播放记录，说明可能是API缓存问题
+    if (latestEpisodes < record.total_episodes) {
+      console.warn(`${record.title} API返回集数(${latestEpisodes})少于播放记录(${record.total_episodes})，可能是API缓存问题`);
+    }
 
     if (hasUpdate) {
       console.log(`${record.title} 发现新集数: ${record.total_episodes} -> ${latestEpisodes} 集，新增${newEpisodes}集`);
