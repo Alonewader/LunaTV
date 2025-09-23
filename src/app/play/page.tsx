@@ -2806,6 +2806,32 @@ function PlayPageClient() {
 
             hls.on(Hls.Events.ERROR, function (event: any, data: any) {
               console.error('HLS Error:', event, data);
+
+              // v1.6.13 增强：处理片段解析错误（针对initPTS修复）
+              if (data.details === Hls.ErrorDetails.FRAG_PARSING_ERROR) {
+                console.log('片段解析错误，尝试重新加载...');
+                // 重新开始加载，利用v1.6.13的initPTS修复
+                hls.startLoad();
+                return;
+              }
+
+              // v1.6.13 增强：处理时间戳相关错误（直播回搜修复）
+              if (data.details === Hls.ErrorDetails.BUFFER_APPEND_ERROR &&
+                  data.err && data.err.message &&
+                  data.err.message.includes('timestamp')) {
+                console.log('时间戳错误，清理缓冲区并重新加载...');
+                try {
+                  // 清理缓冲区后重新开始，利用v1.6.13的时间戳包装修复
+                  const currentTime = video.currentTime;
+                  hls.trigger(Hls.Events.BUFFER_RESET, undefined);
+                  hls.startLoad(currentTime);
+                } catch (e) {
+                  console.warn('缓冲区重置失败:', e);
+                  hls.startLoad();
+                }
+                return;
+              }
+
               if (data.fatal) {
                 switch (data.type) {
                   case Hls.ErrorTypes.NETWORK_ERROR:

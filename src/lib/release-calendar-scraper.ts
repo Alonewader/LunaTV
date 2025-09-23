@@ -180,6 +180,7 @@ export async function scrapeMovieReleases(): Promise<ReleaseCalendarItem[]> {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
+      signal: AbortSignal.timeout(15000), // 15秒超时
     });
 
     if (!response.ok) {
@@ -204,6 +205,7 @@ export async function scrapeTVReleases(): Promise<ReleaseCalendarItem[]> {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
+      signal: AbortSignal.timeout(15000), // 15秒超时
     });
 
     if (!response.ok) {
@@ -222,12 +224,29 @@ export async function scrapeTVReleases(): Promise<ReleaseCalendarItem[]> {
  * 抓取所有数据
  */
 export async function scrapeAllReleases(): Promise<ReleaseCalendarItem[]> {
-  const [movies, tvShows] = await Promise.all([
-    scrapeMovieReleases(),
-    scrapeTVReleases(),
-  ]);
+  try {
+    console.log('开始抓取发布日历数据...');
 
-  return [...movies, ...tvShows];
+    // 避免并发请求导致的失败，改为顺序执行
+    console.log('抓取电影数据...');
+    const movies = await scrapeMovieReleases();
+    console.log(`电影数据抓取完成: ${movies.length} 部`);
+
+    // 添加延迟避免请求过于频繁
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    console.log('抓取电视剧数据...');
+    const tvShows = await scrapeTVReleases();
+    console.log(`电视剧数据抓取完成: ${tvShows.length} 部`);
+
+    const allItems = [...movies, ...tvShows];
+    console.log(`总共抓取到 ${allItems.length} 条发布数据`);
+
+    return allItems;
+  } catch (error) {
+    console.error('抓取发布日历数据失败:', error);
+    return [];
+  }
 }
 
 /**

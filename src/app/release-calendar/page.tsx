@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Calendar, Filter, Search, Clock, Film, Tv, MapPin, Tag } from 'lucide-react';
+import { Calendar, Filter, Search, Clock, Film, Tv, MapPin, Tag, ChevronUp } from 'lucide-react';
 
 import { ReleaseCalendarItem, ReleaseCalendarResult } from '@/lib/types';
 import PageLayout from '@/components/PageLayout';
@@ -27,6 +27,9 @@ export default function ReleaseCalendarPage() {
 
   // 视图模式
   const [viewMode, setViewMode] = useState<'grid' | 'timeline'>('grid');
+
+  // 返回顶部按钮状态
+  const [showBackToTop, setShowBackToTop] = useState(false);
 
   // 清理过期缓存
   const cleanExpiredCache = () => {
@@ -262,6 +265,41 @@ export default function ReleaseCalendarPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // 监听滚动事件以显示/隐藏返回顶部按钮
+  useEffect(() => {
+    const getScrollTop = () => {
+      return document.body.scrollTop || document.documentElement.scrollTop || 0;
+    };
+
+    // 滚动事件处理
+    const handleScroll = () => {
+      const scrollTop = getScrollTop();
+      setShowBackToTop(scrollTop > 300);
+    };
+
+    // 监听 body 元素的滚动事件（参考play-stats页面的实现方式）
+    document.body.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      document.body.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  // 返回顶部功能
+  const scrollToTop = () => {
+    try {
+      // 根据play-stats页面的实现，真正的滚动容器是 document.body
+      document.body.scrollTo({
+        top: 0,
+        behavior: 'smooth',
+      });
+    } catch (e) {
+      // 降级方案
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+    }
+  };
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -601,6 +639,17 @@ export default function ReleaseCalendarPage() {
               </div>
             )}
           </>
+        )}
+
+        {/* 返回顶部悬浮按钮 */}
+        {showBackToTop && (
+          <button
+            onClick={scrollToTop}
+            className="fixed bottom-6 right-6 z-50 group bg-blue-600 dark:bg-blue-700 text-white p-3 rounded-full shadow-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-all duration-300 hover:scale-110"
+            aria-label="返回顶部"
+          >
+            <ChevronUp className="w-6 h-6 transition-transform group-hover:scale-110" />
+          </button>
         )}
       </div>
       </div>

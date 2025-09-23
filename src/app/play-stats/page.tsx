@@ -35,6 +35,7 @@ const PlayStatsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'admin' | 'personal'>('admin'); // 新增Tab状态
   const [upcomingReleases, setUpcomingReleases] = useState<ReleaseCalendarItem[]>([]);
   const [upcomingLoading, setUpcomingLoading] = useState(false);
+  const [upcomingInitialized, setUpcomingInitialized] = useState(false);
 
   // 检查用户权限
   useEffect(() => {
@@ -246,6 +247,7 @@ const PlayStatsPage: React.FC = () => {
           console.log('使用缓存的即将上映数据，缓存年龄:', Math.round(age / 1000 / 60), '分钟');
           setUpcomingReleases(JSON.parse(cachedData));
           setUpcomingLoading(false);
+          setUpcomingInitialized(true); // 标记已经初始化完成
           return;
         }
       }
@@ -271,11 +273,16 @@ const PlayStatsPage: React.FC = () => {
         console.log('获取即将上映内容成功:', items.length, '(从服务器)');
       } else {
         console.error('获取即将上映内容失败:', response.status);
+        // API失败时设置空数组，确保UI仍然显示
+        setUpcomingReleases([]);
       }
     } catch (error) {
       console.error('获取即将上映内容失败:', error);
+      // 网络错误时设置空数组，确保UI仍然显示
+      setUpcomingReleases([]);
     } finally {
       setUpcomingLoading(false);
+      setUpcomingInitialized(true); // 标记已经初始化完成
     }
   }, [cleanExpiredCache]);
 
@@ -1147,7 +1154,7 @@ const PlayStatsPage: React.FC = () => {
               </div>
 
               {/* 即将上映卡片 */}
-              {(upcomingReleases.length > 0 || upcomingLoading) && (
+              {(upcomingInitialized || upcomingLoading) && (
                 <div className="mb-8">
                   <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg p-6 text-white shadow-lg">
                     <div className="flex items-center justify-between mb-4">
@@ -1228,6 +1235,19 @@ const PlayStatsPage: React.FC = () => {
                                     </div>
                                   </div>
                                 ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 空状态提示 */}
+                          {upcomingReleases.length === 0 && !upcomingLoading && upcomingInitialized && (
+                            <div className="text-center py-6">
+                              <div className="text-purple-100 text-sm mb-2">📅</div>
+                              <div className="text-purple-100 text-sm">
+                                暂无即将上映的内容
+                              </div>
+                              <div className="text-purple-200 text-xs mt-1">
+                                数据获取可能失败，请尝试刷新
                               </div>
                             </div>
                           )}
@@ -1703,7 +1723,7 @@ const PlayStatsPage: React.FC = () => {
           </div>
 
           {/* 即将上映卡片 */}
-          {(upcomingReleases.length > 0 || upcomingLoading) && (
+          {(upcomingInitialized || upcomingLoading) && (
             <div className="mb-8">
               <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg p-6 text-white shadow-lg">
                 <div className="flex items-center justify-between mb-4">
@@ -1783,6 +1803,19 @@ const PlayStatsPage: React.FC = () => {
                                 </div>
                               </div>
                             ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 空状态提示 */}
+                      {upcomingReleases.length === 0 && !upcomingLoading && upcomingInitialized && (
+                        <div className="text-center py-6">
+                          <div className="text-purple-100 text-sm mb-2">📅</div>
+                          <div className="text-purple-100 text-sm">
+                            暂无即将上映的内容
+                          </div>
+                          <div className="text-purple-200 text-xs mt-1">
+                            数据获取可能失败，请尝试刷新
                           </div>
                         </div>
                       )}
