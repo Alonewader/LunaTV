@@ -22,6 +22,7 @@ import VirtualSearchGrid from '@/components/VirtualSearchGrid';
 import NetDiskSearchResults from '@/components/NetDiskSearchResults';
 import YouTubeVideoCard from '@/components/YouTubeVideoCard';
 import DirectYouTubePlayer from '@/components/DirectYouTubePlayer';
+import TMDBFilterPanel, { TMDBFilterState } from '@/components/TMDBFilterPanel';
 
 function SearchPageClient() {
   // 搜索历史
@@ -73,6 +74,27 @@ function SearchPageClient() {
   const [tmdbActorLoading, setTmdbActorLoading] = useState(false);
   const [tmdbActorError, setTmdbActorError] = useState<string | null>(null);
   const [tmdbActorType, setTmdbActorType] = useState<'movie' | 'tv'>('movie');
+
+  // TMDB筛选状态
+  const [tmdbFilterState, setTmdbFilterState] = useState<TMDBFilterState>({
+    startYear: undefined,
+    endYear: undefined,
+    minRating: undefined,
+    maxRating: undefined,
+    minPopularity: undefined,
+    maxPopularity: undefined,
+    minVoteCount: undefined,
+    minEpisodeCount: undefined,
+    genreIds: [],
+    languages: [],
+    onlyRated: false,
+    sortBy: 'popularity',
+    sortOrder: 'desc',
+    limit: undefined // 移除默认限制，显示所有结果
+  });
+
+  // TMDB筛选面板显示状态
+  const [tmdbFilterVisible, setTmdbFilterVisible] = useState(false);
   // 聚合卡片 refs 与聚合统计缓存
   const groupRefs = useRef<Map<string, React.RefObject<VideoCardHandle>>>(new Map());
   const groupStatsRef = useRef<Map<string, { douban_id?: number; episodes?: number; source_names: string[] }>>(new Map());
@@ -464,7 +486,7 @@ function SearchPageClient() {
         } else if (searchType === 'youtube' && !youtubeLoading && !youtubeResults && !youtubeError) {
           handleYouTubeSearch(currentQuery);
         } else if (searchType === 'tmdb-actor' && !tmdbActorLoading && !tmdbActorResults && !tmdbActorError) {
-          handleTmdbActorSearch(currentQuery);
+          handleTmdbActorSearch(currentQuery, tmdbActorType, tmdbFilterState);
         }
       }
     }
@@ -740,16 +762,44 @@ function SearchPageClient() {
   };
 
   // TMDB演员搜索函数
-  const handleTmdbActorSearch = async (query: string, type = tmdbActorType) => {
+  const handleTmdbActorSearch = async (query: string, type = tmdbActorType, filterState = tmdbFilterState) => {
     if (!query.trim()) return;
+
+    console.log(`🚀 [前端TMDB] 开始搜索: ${query}, type=${type}`);
 
     setTmdbActorLoading(true);
     setTmdbActorError(null);
     setTmdbActorResults(null);
 
     try {
+      // 构建筛选参数
+      const params = new URLSearchParams({
+        actor: query.trim(),
+        type: type
+      });
+
+      // 只有设置了limit且大于0时才添加limit参数
+      if (filterState.limit && filterState.limit > 0) {
+        params.append('limit', filterState.limit.toString());
+      }
+
+      // 添加筛选参数
+      if (filterState.startYear) params.append('startYear', filterState.startYear.toString());
+      if (filterState.endYear) params.append('endYear', filterState.endYear.toString());
+      if (filterState.minRating) params.append('minRating', filterState.minRating.toString());
+      if (filterState.maxRating) params.append('maxRating', filterState.maxRating.toString());
+      if (filterState.minPopularity) params.append('minPopularity', filterState.minPopularity.toString());
+      if (filterState.maxPopularity) params.append('maxPopularity', filterState.maxPopularity.toString());
+      if (filterState.minVoteCount) params.append('minVoteCount', filterState.minVoteCount.toString());
+      if (filterState.minEpisodeCount) params.append('minEpisodeCount', filterState.minEpisodeCount.toString());
+      if (filterState.genreIds && filterState.genreIds.length > 0) params.append('genreIds', filterState.genreIds.join(','));
+      if (filterState.languages && filterState.languages.length > 0) params.append('languages', filterState.languages.join(','));
+      if (filterState.onlyRated) params.append('onlyRated', 'true');
+      if (filterState.sortBy) params.append('sortBy', filterState.sortBy);
+      if (filterState.sortOrder) params.append('sortOrder', filterState.sortOrder);
+
       // 调用TMDB API端点
-      const response = await fetch(`/api/tmdb/actor?actor=${encodeURIComponent(query.trim())}&type=${type}&limit=20`);
+      const response = await fetch(`/api/tmdb/actor?${params.toString()}`);
       const data = await response.json();
 
       if (response.ok && data.code === 200) {
@@ -786,7 +836,7 @@ function SearchPageClient() {
     } else if (searchType === 'tmdb-actor') {
       // TMDB演员搜索
       router.push(`/search?q=${encodeURIComponent(trimmed)}`);
-      handleTmdbActorSearch(trimmed);
+      handleTmdbActorSearch(trimmed, tmdbActorType, tmdbFilterState);
     } else {
       // 原有的影视搜索逻辑
       setIsLoading(true);
@@ -927,7 +977,7 @@ function SearchPageClient() {
                     // 如果当前有搜索词，立即触发TMDB演员搜索
                     const currentQuery = searchQuery.trim() || searchParams?.get('q');
                     if (currentQuery && showResults) {
-                      handleTmdbActorSearch(currentQuery);
+                      handleTmdbActorSearch(currentQuery, tmdbActorType, tmdbFilterState);
                     }
                   }}
                   className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
@@ -1047,7 +1097,7 @@ function SearchPageClient() {
                               setTmdbActorType(type.key as 'movie' | 'tv');
                               const currentQuery = searchQuery.trim() || searchParams?.get('q');
                               if (currentQuery) {
-                                handleTmdbActorSearch(currentQuery, type.key as 'movie' | 'tv');
+                                handleTmdbActorSearch(currentQuery, type.key as 'movie' | 'tv', tmdbFilterState);
                               }
                             }}
                             className={`px-3 py-1 text-sm rounded-full border transition-colors ${
@@ -1062,6 +1112,24 @@ function SearchPageClient() {
                         ))}
                       </div>
                     </div>
+
+                    {/* TMDB筛选面板 */}
+                    <div className='mt-4'>
+                      <TMDBFilterPanel
+                        contentType={tmdbActorType}
+                        filters={tmdbFilterState}
+                        onFiltersChange={(newFilterState) => {
+                          setTmdbFilterState(newFilterState);
+                          const currentQuery = searchQuery.trim() || searchParams?.get('q');
+                          if (currentQuery) {
+                            handleTmdbActorSearch(currentQuery, tmdbActorType, newFilterState);
+                          }
+                        }}
+                        isVisible={tmdbFilterVisible}
+                        onToggleVisible={() => setTmdbFilterVisible(!tmdbFilterVisible)}
+                        resultCount={tmdbActorResults?.length || 0}
+                      />
+                    </div>
                   </div>
 
                   {tmdbActorError ? (
@@ -1071,7 +1139,7 @@ function SearchPageClient() {
                         onClick={() => {
                           const currentQuery = searchQuery.trim() || searchParams?.get('q');
                           if (currentQuery) {
-                            handleTmdbActorSearch(currentQuery, tmdbActorType);
+                            handleTmdbActorSearch(currentQuery, tmdbActorType, tmdbFilterState);
                           }
                         }}
                         className='px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors'
